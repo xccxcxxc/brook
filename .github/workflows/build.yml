@@ -1,0 +1,72 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# 连续推送时只让最新的一次跑完：两次构建同时删建 latest Release 会互相冲突（HTTP 422）
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # versionCode = 提交数
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # 21：Robolectric 手势测试要加载 Miuix（Java 21 字节码）；编译产物的字节码级别仍是 17（见 app/build.gradle.kts）
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Restore signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.BROOK_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/brook.jks"
+            echo "BROOK_KEYSTORE=$RUNNER_TEMP/brook.jks" >> "$GITHUB_ENV"
+          fi
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest
+      - name: Build release APK and AAB
+        env:
+          BROOK_KEYSTORE_PASSWORD: ${{ secrets.BROOK_KEYSTORE_PASSWORD }}
+        run: ./gradlew :app:assembleRelease :app:bundleRelease
+      - name: Publish rolling "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk=app/build/outputs/apk/release/app-release.apk
+          count=$(git rev-list --count HEAD)
+          name="runnel-$count-$(git rev-parse --short HEAD).apk"
+          cp "$apk" "$name"
+          # 更新说明 = 自上一个包以来的提交说明（标题 + 正文，正文里写“改了什么 / 真机测什么”）
+          prev=$(git rev-parse -q --verify "refs/tags/latest^{commit}" || true)
+          range=${prev:+$prev..}HEAD
+          {
+            echo "main 分支 $(git rev-parse --short HEAD) 自动构建，APK 直接安装（与本机构建同一签名，可覆盖安装）。"
+            echo
+            echo "## 本次更新（自上一个包以来）"
+            echo
+            git log -n 30 --pretty=format:'### %s%n%n%b%n' "$range" | grep -v -i -E '^(Co-Authored-By|Claude-Session|🤖 Generated)'
+          } > notes.md
+          gh release delete latest -y --cleanup-tag || true
+          gh release create latest "$name" --prerelease --target "$GITHUB_SHA" \
+            --title "最新构建 #$count" --notes-file notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runnel-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
+      # 上传到 Google Play 用的 AAB（和 APK 同一把签名）；Actions 页面下载，保留 30 天
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runnel-release-aab
+          path: app/build/outputs/bundle/release/app-release.aab

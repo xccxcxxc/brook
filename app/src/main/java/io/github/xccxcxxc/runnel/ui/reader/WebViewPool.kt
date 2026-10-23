@@ -51,7 +51,38 @@ object WebViewPool {
         return view
     }
 
+    /**
+     * 最近退出的文章的 WebView 不清空，正文和滚动位置原样留着（最多 [MAX_PARKED] 篇）：再打开同一篇直接拿回来用，
+     * 不重新载入，也就不用再滚到上次的位置（2026-10-24 用户要求“直接回到原处，不要滑”）。
+     */
+    private const val MAX_PARKED = 2
+    private val parked = LinkedHashMap<Long, WebView>()
+
+    fun park(id: Long, view: WebView) {
+        (view.webChromeClient as? FullscreenChrome)?.exit()
+        (view.parent as? ViewGroup)?.removeView(view)
+        view.setOnScrollChangeListener(null)
+        view.setOnLongClickListener(null)
+        view.evaluateJavascript(PAUSE_MEDIA, null)
+        view.onPause()
+        (view.context as MutableContextWrapper).baseContext = view.context.applicationContext
+        parked.remove(id)?.takeIf { it !== view }?.let(::recycle)
+        parked[id] = view
+        while (parked.size > MAX_PARKED) recycle(parked.remove(parked.keys.first())!!)
+    }
+
+    /** 取回 [id] 留着的 WebView（没有就返回 null），交给 [context] 的页面。 */
+    fun takeParked(id: Long, context: Context): WebView? {
+        val view = parked.remove(id) ?: return null
+        (view.context as MutableContextWrapper).baseContext = context
+        view.onResume()
+        return view
+    }
+
+    private const val PAUSE_MEDIA = "document.querySelectorAll('video,audio').forEach(function(m){m.pause()})"
+
     fun recycle(view: WebView) {
+        view.onResume() // 留着时暂停过；回到池里给别的文章用
         (view.webChromeClient as? FullscreenChrome)?.exit()
         (view.parent as? ViewGroup)?.removeView(view)
         view.stopLoading()

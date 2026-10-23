@@ -121,6 +121,9 @@ private object ReaderScrollMemory {
 private class ScrollRestore(var target: Int) {
     var settled = target <= 0
 
+    /** 用的是留在内存里的 WebView，还没对过正文（对上了就不用重新载入）。 */
+    var parked = false
+
     /** 正文是否可以露出来：要恢复位置时，先用背景色盖住 WebView，滚到位再露出，免得先看到顶部再跳过去。 */
     var revealed by mutableStateOf(target <= 0)
 }
@@ -425,9 +428,13 @@ private fun ArticlePage(id: Long, isCurrent: Boolean, state: ReaderState, settin
         state.webViews[id]?.evaluateJavascript(ReaderHtml.paddingScript(topPad, bottomPad), null)
     }
     val bg = colors.background.toArgb()
-    val restore = remember(id) { ScrollRestore(ReaderScrollMemory[id]) }
-    // 第一次载入正文后滚回上次退出时的位置：图片还没撑开高度时 scrollTo 会被截短，所以隔一会儿重试，到位或用户自己动了手就停。
-    // 恢复期间正文被背景色盖住，到位后一次性露出（最多盖 0.8 秒，之后仍在后台继续重试）
+    val context = LocalContext.current
+    // 上次退出时留在内存里的 WebView（WebViewPool.park）：正文已排好、停在原位置，直接复用，不用恢复
+    val parked = remember(id) { WebViewPool.takeParked(id, context) }
+    val restore = remember(id) { ScrollRestore(if (parked != null) 0 else ReaderScrollMemory[id]).also { it.parked = parked != null } }
+    val current by rememberUpdatedState(isCurrent)
+    // 没有留着的 WebView 时，第一次载入正文后滚回上次退出时的位置：图片还没撑开高度时 scrollTo 会被截短，所以隔一会儿重试，
+    // 到位或用户自己动了手就停。恢复期间正文被背景色盖住，到位后一次性露出（最多盖 0.8 秒，之后仍在后台继续重试）
     LaunchedEffect(html) {
         if (html == null || restore.target <= 0) return@LaunchedEffect
         val target = restore.target
@@ -454,13 +461,12 @@ private fun ArticlePage(id: Long, isCurrent: Boolean, state: ReaderState, settin
         }
     }
 
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pressedImage by remember { mutableStateOf<String?>(null) }
     Box(Modifier.fillMaxSize()) {
         AndroidView(
             factory = { ctx ->
-                WebViewPool.obtain(ctx).also {
+                (parked ?: WebViewPool.obtain(ctx)).also {
                     it.setBackgroundColor(bg)
                     state.webViews[id] = it
                     it.setOnScrollChangeListener { _, _, y, _, oldY -> state.onWebScroll(id, y, oldY) }
@@ -483,14 +489,22 @@ private fun ArticlePage(id: Long, isCurrent: Boolean, state: ReaderState, settin
             onRelease = {
                 if (restore.settled && it.tag != null) ReaderScrollMemory[id] = it.scrollY
                 if (state.webViews[id] === it) state.webViews.remove(id)
-                WebViewPool.recycle(it)
+                // 正在看的这篇（退回列表等）原样留在内存里，再打开时直接复用；翻页时滑出去的相邻页照常回收
+                if (current && restore.settled && it.tag != null) WebViewPool.park(id, it) else WebViewPool.recycle(it)
             },
             update = { view ->
                 view.setBackgroundColor(bg)
                 if (html != null && view.tag != html) {
+                    // 留着的那份正文已经过时（期间改了字号、样式等）：只能重新载入，再按它原来的位置恢复
+                    if (restore.parked && view.tag != null && view.scrollY > 0) {
+                        restore.target = view.scrollY
+                        restore.settled = false
+                        restore.revealed = false
+                    }
                     view.tag = html
                     view.loadDataWithBaseURL(article?.url ?: "https://runnel.invalid/", html, "text/html", "utf-8", null)
                 }
+                if (html != null) restore.parked = false
             },
         )
         if (!restore.revealed) Box(Modifier.fillMaxSize().background(colors.background))

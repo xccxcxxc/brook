@@ -171,9 +171,12 @@ class ReaderTest {
         rule.onNodeWithText("分享图片").assertExists()
     }
 
-    /** 点开读过的文章（滚到深处）退出再进，直接回到原位置。 */
+    /**
+     * 点开读过的文章（滚到深处）退出再进，直接回到原位置，不重新载入、不滚动（2026-10-24）：
+     * 退出时 WebView 留在内存里（WebViewPool.park），再进拿回同一个，一出现就停在原处。
+     */
     @Test
-    fun reopenRestoresScrollPosition() {
+    fun reopenShowsSameWebViewAtSamePosition() {
         val w = scrolledDeep()
         var saved = 0
         scenario!!.onActivity { saved = w.scrollY }
@@ -181,13 +184,17 @@ class ReaderTest {
         rule.waitUntilAtLeastOneExists(hasText("阅读页测试文章"), 10_000)
         rule.onNodeWithText("阅读页测试文章").performClick()
         rule.waitUntilAtLeastOneExists(hasTestTag("reader_pager"), 10_000)
-        waitFor(5_000) { findWebViewY() >= saved - 2 }
-    }
-
-    private fun findWebViewY(): Int {
+        var again: WebView? = null
         var y = -1
-        scenario!!.onActivity { y = findWebView(it.window.decorView)?.scrollY ?: -1 }
-        return y
+        scenario!!.onActivity {
+            again = findWebView(it.window.decorView)
+            y = again?.scrollY ?: -1
+        }
+        assertTrue("没有复用留着的 WebView", again === w)
+        assertEquals("一出现就该在原位置", saved, y)
+        Thread.sleep(500)
+        scenario!!.onActivity { y = w.scrollY }
+        assertEquals("之后也不该被重新载入或滚动", saved, y)
     }
 
     /** 点标题 = 在浏览器里打开原文。真实 WebView 的点击要走到 shouldOverrideUrlLoading。 */

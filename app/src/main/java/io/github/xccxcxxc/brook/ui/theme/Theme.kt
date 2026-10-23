@@ -23,7 +23,7 @@ import io.github.xccxcxxc.brook.data.AppFont
 import io.github.xccxcxxc.brook.data.Settings
 import top.yukonga.miuix.kmp.utils.MiuixOverscrollFactory
 
-/** 配色参照 iOS 系统色；强调色是青绿，和 App 图标底色一致（res/values/colors.xml 的 ic_launcher_background）。 */
+/** 配色参照 iOS 系统色；强调色是青绿，和 App 图标底色同一色系（res/drawable/ic_launcher_background.xml）。 */
 @Immutable
 data class BrookColors(
     val isDark: Boolean,

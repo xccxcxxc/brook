@@ -5,7 +5,8 @@
 ## 0. 开源（2026-10-21）
 
 - 公开仓库：`xccxcxxc/runnel`（GPL-3.0），从一个初始提交开始，没有之前的历史。原来的私有仓库改名为 `xccxcxxc/brook-private`，保持私有；v1.0.0–v2.1 的 Release 和完整提交历史都在那里，下文 §1 里的提交号、Release 链接指的是那个仓库。
-- 开源前做过的：自己画的 App 图标（淡青底 #CDEEE9 三道近白 #F2FBF9 水波，矢量）、强调色青绿（浅 #2F8F83 / 深 #4FB3A6）、订阅源无图标时显示名称首字、去掉第三方 App 的名称/截图/素材、清理本机路径、加 `LICENSE` 和设置 → 关于 → “开源许可”页（`ui/settings/LicensesPage.kt`，**新增依赖要在 `dependencies` 补一行**）。
+- **App 图标**（2026-10-23 重画）：默认“涟漪”（青绿渐变底，白色水滴 + 两圈涟漪 = RSS 符号），备选“页中溪”（文章卡片 + 溪水），设置 → 外观 → App 图标 里切换。桌面入口是 manifest 里两个 activity-alias（`.LauncherRipple` / `.LauncherPage`，同时只启用一个，`ui/settings/AppIcon.kt`），`MainActivity` 本身不再带 LAUNCHER，测试和 benchmark 照常显式启动它。加新图标：画 `ic_launcher_xxx_*` 三层、加 alias（默认 `enabled="false"`）、`AppIcon` 加一项。
+- 开源前做过的：自己画的 App 图标（已被上一条替换）、强调色青绿（浅 #2F8F83 / 深 #4FB3A6）、订阅源无图标时显示名称首字、去掉第三方 App 的名称/截图/素材、清理本机路径、加 `LICENSE` 和设置 → 关于 → “开源许可”页（`ui/settings/LicensesPage.kt`，**新增依赖要在 `dependencies` 补一行**）。
 - 演示数据里的订阅源名都是虚构的，不要换回真实网站。对外名称 2026-10-21 改为 **Runnel**（Brook 和 txthinking/brook 撞名；Rook 和 rook/rook 撞名，试过后放弃），内部名称仍是 Brook，见 `CLAUDE.md` 开头。上架 Google Play 前还要查商标。
 - **账号凭据**（2026-10-21）：密码不再保存（登录后只用服务器发的 token）；token 用 Android Keystore AES-GCM 加密，账号单独放 `shared_prefs/account.xml` 并从自动备份/换机迁移里排除（`res/xml/backup_rules.xml`、`data_extraction_rules.xml`），恢复到新设备后回到登录页。旧版明文账号在升级后第一次启动时迁移，保持登录。Keystore 只在第一次同步时解密（`Prefs.authToken()`），不在启动路径上。仪器测试 `AccountStorageTest`（Robolectric 没有 Keystore）。
 - **明文 http**：用户决定不限制（只允许局域网走 http 会让公网 http 的订阅源图片打不开）；登录页对公网 http 地址给提示，不拦截。
@@ -65,7 +66,7 @@
 - `ui/list/ArticleListScreen.kt`：分组、缩略图、侧滑、长按菜单（`ui/components/ContextMenu.kt`，行的位置取 `layoutInfo` 的 `offset - viewportStartOffset`）、Filter、从底部上拉、全部标为已读（`leave()`：先导航再写库）。
 - `ui/reader/`：`ReaderScreen`（自动隐藏栏、Reader View、拉动切篇）、`ReaderHtml`（CSS；标题链到 `brook://open?u=`；表情图片按 src/alt 识别成行内；包着图片的链接不显示域名）、`WebViewPool`、`ReaderStylePanel`（“…”面板）。
 - `ui/settings/`：`SettingsSheet`（全部设置页）、`ReaderStyle`（阅读样式控件，设置页和“…”面板共用）；组件在 `ui/components/Grouped.kt`。
-- 设置项按用户给的截图；**猜的选项**（用户给图就改）：动画速度 0.7×/1×/1.5×/2.2×、阅读字体默认/衬线/等宽、图片预览关闭/小/中/大。**有意没做**：Unread count badge、App icon、List selection style、Landscape、Dim archived、Services/Support/About、Add to Reading List、Bionic Reading。
+- 设置项按用户给的截图；**猜的选项**（用户给图就改）：动画速度 0.7×/1×/1.5×/2.2×、阅读字体默认/衬线/等宽、图片预览关闭/小/中/大。**有意没做**：Unread count badge、List selection style、Landscape、Dim archived、Services/Support/About、Add to Reading List、Bionic Reading。
 
 ## 6. 待办
 

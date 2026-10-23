@@ -420,6 +420,7 @@ private fun AppearancePage() {
         RowDivider()
         SwitchRow("订阅源图标灰度显示", settings.grayFavicons) { v -> prefs.updateSettings { it.copy(grayFavicons = v) } }
     }
+    AppIconSection()
     GroupedSection("文字") {
         PickerRow("App 字体", listOf(AppFont.SANS to "无衬线", AppFont.SERIF to "衬线"), settings.appFont) { v ->
             prefs.updateSettings { it.copy(appFont = v) }

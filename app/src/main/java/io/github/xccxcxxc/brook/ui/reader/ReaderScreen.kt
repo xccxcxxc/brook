@@ -101,6 +101,24 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sign
 
+/** 每篇文章退出时的正文滚动位置（px），再次打开同一篇时回到那里；只在本次运行内记，最多记 100 篇。 */
+private object ReaderScrollMemory {
+    private val positions = object : LinkedHashMap<Long, Int>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Int>) = size > 100
+    }
+
+    operator fun get(id: Long): Int = positions[id] ?: 0
+
+    operator fun set(id: Long, y: Int) {
+        if (y > 0) positions[id] = y else positions.remove(id)
+    }
+}
+
+/** 一个 ArticlePage 的滚动恢复状态：[target] 是待恢复的位置，[settled] 为 true 才允许在释放时保存（还没恢复完就退出，别把旧位置覆盖成 0）。 */
+private class ScrollRestore(var target: Int) {
+    var settled = target <= 0
+}
+
 /** 阅读页状态：已加载文章的缓存、全文模式、提示消息、拉动切篇的位移。 */
 class ReaderState(private val graph: AppGraph, private val scope: CoroutineScope) {
     private val cache = LinkedHashMap<Long, ReaderArticle>(16, 0.75f, true)
@@ -393,6 +411,27 @@ private fun ArticlePage(id: Long, isCurrent: Boolean, state: ReaderState, settin
         if (!ready) null else article?.let { ReaderHtml.build(it, body, settings, colors, topPad, bottomPad) }
     }
     val bg = colors.background.toArgb()
+    val restore = remember(id) { ScrollRestore(ReaderScrollMemory[id]) }
+    // 第一次载入正文后滚回上次退出时的位置：图片还没撑开高度时 scrollTo 会被截短，所以隔一会儿重试，到位或用户自己动了手就停
+    LaunchedEffect(html) {
+        if (html == null || restore.target <= 0) return@LaunchedEffect
+        val target = restore.target
+        restore.target = 0
+        try {
+            var lastSet = -1
+            for (attempt in 0 until 14) {
+                delay(150)
+                val web = state.webViews[id] ?: break
+                val y = web.scrollY
+                if (y >= target - 2) break
+                if (lastSet >= 0 && y != lastSet && y != 0) break // 用户已经自己滚动了
+                web.scrollTo(0, target)
+                lastSet = web.scrollY
+            }
+        } finally {
+            restore.settled = true
+        }
+    }
     AndroidView(
         factory = { ctx ->
             WebViewPool.obtain(ctx).also {
@@ -404,6 +443,7 @@ private fun ArticlePage(id: Long, isCurrent: Boolean, state: ReaderState, settin
         modifier = Modifier.fillMaxSize(),
         onReset = null,
         onRelease = {
+            if (restore.settled && it.tag != null) ReaderScrollMemory[id] = it.scrollY
             if (state.webViews[id] === it) state.webViews.remove(id)
             WebViewPool.recycle(it)
         },

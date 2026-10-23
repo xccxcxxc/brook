@@ -17,7 +17,8 @@
 
 ## 1. 当前状态（2026-10-23）
 
-- **阅读页视频**（1.0 之后，2026-10-23，用户还没真机测）：喷嚏图卦、虎嗅的视频打不开。
+- **Runnel 1.1 已发布**（2026-10-23）：正式 Release `v1.1`（https://github.com/xccxcxxc/runnel/releases/tag/v1.1，附 `Runnel-1.1.apk`，versionCode 209，正式签名 CN=Runnel，目标提交 `7e60ad6`），可覆盖安装 1.0。相对 1.0 只有下一条“阅读页视频”。
+- **阅读页视频**（含在 1.1，2026-10-23，用户还没真机测）：喷嚏图卦、虎嗅的视频打不开。
   - 喷嚏：正文里是微博视频 / B 站 / 喷嚏自己的音频卡片 iframe，`ArticleProcessor` 以前只放行 YouTube 等，其余换成“嵌入内容 ↗”链接。现在放行国内视频站和与文章同主机的 iframe（`ArticleProcessor.embeddable`，按主机名后缀，不看整个地址），视频站的 http 改 https；旧文章里的链接由 `ReaderHtml.restoreEmbeds` 显示时换回播放器。iframe 按 width/height 定宽高比。
   - 虎嗅：视频文章 RSS 只有一句摘要，mp4 在原网页的 Nuxt 数据里。`content/PageVideo`：虎嗅文章正文很短、没有图片时自动抓原网页（`ReaderState.autoFullText`），全文 = `<video>`（720p + 封面）+ 网页简介，不走 Readability（会把 logo、“下载虎嗅APP”当正文）。
   - `WebViewPool`：开 DOM 存储（微博/B 站播放器没有 localStorage 就白屏）、允许第三方 Cookie、`FullscreenChrome`（全屏层盖在 decorView 上、隐藏系统栏、横屏，返回键退出）。`MainActivity` 加了 `configChanges`（转屏不重建）。正文上下留白改成 CSS 变量、变化时用脚本改（`ReaderHtml.paddingScript`），**不能放进 HTML 的 remember key**：全屏时系统栏隐藏、留白一变就重新载入，播放器立刻被踢出全屏。

@@ -19,8 +19,10 @@
         <!-- macrobenchmark 需要能从 shell profile release 包 -->
         <profileable android:shell="true" />
 
+        <!-- 全屏看视频时转成横屏：自己处理旋转，不重建 Activity（重建会把正在播放的 WebView 回收掉） -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
             android:exported="true"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize" />

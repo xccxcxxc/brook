@@ -2,6 +2,7 @@ package io.github.xccxcxxc.runnel.ui.reader
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import io.github.xccxcxxc.runnel.content.ArticleProcessor
 import io.github.xccxcxxc.runnel.data.ReaderFont
 import io.github.xccxcxxc.runnel.data.Settings
 import io.github.xccxcxxc.runnel.data.db.ReaderArticle
@@ -28,6 +29,21 @@ object ReaderHtml {
      * 否则 WebView 按屏幕密度另挑一张，没网时就对不上缓存。
      */
     private val SRCSET = Regex("""\ssrcset="[^"]*"""")
+
+    /** 同步时放不进来、被换成链接的 iframe（[ArticleProcessor.EMBED_LINK_TEXT]）。 */
+    private val EMBED_LINK = Regex("""<a href="([^"]+)">${Regex.escape(ArticleProcessor.EMBED_LINK_TEXT)}</a>""")
+
+    /**
+     * 以前同步的文章里，现在能放的嵌入（比如微博视频，2026-10-23 前只放行 YouTube 等）还是链接：显示时换回播放器，
+     * 不用重新同步。
+     */
+    fun restoreEmbeds(body: String, articleUrl: String?): String {
+        if (!body.contains(ArticleProcessor.EMBED_LINK_TEXT)) return body
+        return EMBED_LINK.replace(body) { m ->
+            val src = m.groupValues[1]
+            if (ArticleProcessor.embeddable(src.replace("&amp;", "&"), articleUrl)) "<iframe src=\"$src\" allowfullscreen></iframe>" else m.value
+        }
+    }
 
     fun build(
         article: ReaderArticle,
@@ -60,9 +76,9 @@ object ReaderHtml {
         return """<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <style>
-:root{--bg:${css(colors.background)};--fg:$fg;--bold:$bold;--sec:$sec;--ter:${css(colors.tertiaryLabel)};--rule:$rule;--accent:${css(colors.accent)};--code:${css(colors.highlight)};color-scheme:${if (colors.isDark) "dark" else "light"}}
+:root{--bg:${css(colors.background)};--fg:$fg;--bold:$bold;--sec:$sec;--ter:${css(colors.tertiaryLabel)};--rule:$rule;--accent:${css(colors.accent)};--code:${css(colors.highlight)};--pad-top:${topPaddingDp}px;--pad-bottom:${bottomPaddingDp}px;color-scheme:${if (colors.isDark) "dark" else "light"}}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;padding:${topPaddingDp}px 20px ${bottomPaddingDp}px;background:var(--bg);color:var(--fg);font-family:$font;font-size:${fontSize}px;line-height:${"%.2f".format(Locale.US, settings.readerLineSpacing)};overflow-wrap:anywhere;-webkit-tap-highlight-color:transparent}
+body{margin:0;padding:var(--pad-top) 20px var(--pad-bottom);background:var(--bg);color:var(--fg);font-family:$font;font-size:${fontSize}px;line-height:${"%.2f".format(Locale.US, settings.readerLineSpacing)};overflow-wrap:anywhere;-webkit-tap-highlight-color:transparent}
 header{margin:6px 0 46px;text-align:$align}
 .date{color:var(--ter);font-size:15px;letter-spacing:.02em;font-family:system-ui,sans-serif;margin-bottom:6px}
 h1.title{font-size:${"%.2f".format(Locale.US, settings.titleScale)}em;line-height:1.2;margin:0 0 6px;color:var(--bold);font-weight:${if (settings.titleBold) 700 else 500};letter-spacing:-.01em;font-family:$titleFont${if (settings.titleUppercase) ";text-transform:uppercase" else ""}}
@@ -98,12 +114,17 @@ ul,ol{padding-left:1.4em}
 li{margin:.3em 0}
 </style></head><body>
 <header><div class="date">$date</div>$titleHtml<div class="feed">$byline</div></header>
-<article>${body.replace(SRCSET, "")}</article>
+<article>${restoreEmbeds(body, article.url).replace(SRCSET, "")}</article>
 <script>
 document.querySelectorAll('article a').forEach(function(a){
   var img=a.querySelector('img');
   if(!img||img.matches('$EMOJI_SELECTOR'))return;
   a.classList.add('imglink');
+});
+// 嵌入播放器按原来的宽高比显示（喷嚏的音频卡片 640×220，视频 640×420），没写宽高的按 16:9
+document.querySelectorAll('article iframe').forEach(function(f){
+  var w=f.getAttribute('width'),h=f.getAttribute('height');
+  if(/^\d+$/.test(w)&&/^\d+$/.test(h)&&+w>0&&+h>0)f.style.aspectRatio=w+'/'+h;
 });
 </script>
 </body></html>"""
@@ -116,6 +137,11 @@ document.querySelectorAll('article a').forEach(function(a){
      */
     private const val EMOJI_SELECTOR =
         "article img[src*=\"/emoji/\"],article img[src*=\"twemoji\"],article img[alt^=\":\"][alt\$=\":\"]"
+
+    /** 系统栏变化（全屏看视频、转屏）后改正文上下留白，不重新载入页面。 */
+    fun paddingScript(topPaddingDp: Int, bottomPaddingDp: Int): String =
+        "document.documentElement.style.setProperty('--pad-top','${topPaddingDp}px');" +
+            "document.documentElement.style.setProperty('--pad-bottom','${bottomPaddingDp}px')"
 
     /** 阅读页内部链接：点了打开原文（[WebViewPool] 的链接处理认这个 scheme）。 */
     const val ORIGINAL_SCHEME = "runnel"

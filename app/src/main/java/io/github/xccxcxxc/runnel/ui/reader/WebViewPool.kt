@@ -3,17 +3,27 @@ package io.github.xccxcxxc.runnel.ui.reader
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.MutableContextWrapper
+import android.content.pm.ActivityInfo
 import android.graphics.Color
 import android.net.Uri
 import android.os.Looper
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.browser.customtabs.CustomTabsIntent
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import io.github.xccxcxxc.runnel.Graph
 import io.github.xccxcxxc.runnel.content.ReaderImageCache
 import io.github.xccxcxxc.runnel.data.OpenLinks
@@ -42,6 +52,7 @@ object WebViewPool {
     }
 
     fun recycle(view: WebView) {
+        (view.webChromeClient as? FullscreenChrome)?.exit()
         (view.parent as? ViewGroup)?.removeView(view)
         view.stopLoading()
         view.setOnScrollChangeListener(null)
@@ -65,9 +76,9 @@ object WebViewPool {
         // 不要系统的拉伸回弹：到边缘继续拉是“切换上一篇/下一篇”，由阅读页自己画
         overScrollMode = View.OVER_SCROLL_NEVER
         settings.apply {
-            // 正文里的脚本在同步时已经清掉；开 JS 只为嵌入的视频 iframe
+            // 正文里的脚本在同步时已经清掉；开 JS 和 DOM 存储只为嵌入的播放器（微博、B 站的播放器是单页应用，没有 localStorage 就白屏）
             javaScriptEnabled = true
-            domStorageEnabled = false
+            domStorageEnabled = true
             allowFileAccess = false
             allowContentAccess = false
             mediaPlaybackRequiresUserGesture = true
@@ -78,7 +89,68 @@ object WebViewPool {
             loadsImagesAutomatically = true
         }
         webViewClient = ReaderClient
+        webChromeClient = FullscreenChrome(this)
+        // 嵌入的播放器和正文不同域，要能存自己的 Cookie（微博视频靠访客 Cookie 才给播放地址）
+        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
     }
+
+    /**
+     * 播放器点全屏：WebView 交出一个视频 View，盖在整个 Activity 上，隐藏状态栏和导航栏、横过来；
+     * 返回键或播放器里再点一次退出全屏。
+     */
+    private class FullscreenChrome(private val web: WebView) : WebChromeClient() {
+        private var overlay: View? = null
+        private var callback: CustomViewCallback? = null
+        private var back: OnBackPressedCallback? = null
+        private var savedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+
+        override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+            val activity = web.context.findActivity() as? ComponentActivity
+            if (activity == null || overlay != null) {
+                callback.onCustomViewHidden()
+                return
+            }
+            this.callback = callback
+            val decor = activity.window.decorView as ViewGroup
+            overlay = FrameLayout(activity).apply {
+                setBackgroundColor(Color.BLACK)
+                isClickable = true // 别让点击漏到下面的阅读页
+                tag = FULLSCREEN_TAG
+                addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER))
+            }.also { decor.addView(it, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)) }
+            WindowCompat.getInsetsController(activity.window, decor).apply {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(WindowInsetsCompat.Type.systemBars())
+            }
+            savedOrientation = activity.requestedOrientation
+            activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            back = object : OnBackPressedCallback(true) {
+                override fun handleOnBackPressed() = exit()
+            }.also { activity.onBackPressedDispatcher.addCallback(it) }
+        }
+
+        override fun onHideCustomView() {
+            val view = overlay ?: return
+            overlay = null
+            callback = null
+            back?.remove()
+            back = null
+            (view.parent as? ViewGroup)?.removeView(view)
+            val activity = view.context.findActivity() ?: return
+            WindowCompat.getInsetsController(activity.window, activity.window.decorView).show(WindowInsetsCompat.Type.systemBars())
+            activity.requestedOrientation = savedOrientation
+        }
+
+        /** 退出全屏（返回键、文章页被回收时）。 */
+        fun exit() {
+            val cb = callback ?: return
+            cb.onCustomViewHidden()
+            onHideCustomView()
+        }
+    }
+
+    /** 全屏视频盖在 decorView 上的那一层（测试用来找它）。 */
+    const val FULLSCREEN_TAG = "reader_fullscreen_video"
 
     private object ReaderClient : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {

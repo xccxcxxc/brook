@@ -62,4 +62,16 @@ class ReaderViewTest {
         assertTrue(html.contains("""<img src="https://ex.com/l.jpg" alt="x">"""))
         assertTrue(html.contains("""<source type="image/webp">"""))
     }
+
+    /** 以前同步的文章里微博视频已经被换成“嵌入内容 ↗”链接：显示时换回播放器，不用重新同步；别的链接不动。 */
+    @Test
+    fun oldEmbedLinksBecomePlayersAgain() {
+        val body = """<p><a href="https://h5.video.weibo.com/show/1034:5356719388426257">嵌入内容 ↗</a></p>""" +
+            """<p><a href="https://player.bilibili.com/player.html?aid=1&amp;p=1">嵌入内容 ↗</a></p>""" +
+            """<p><a href="https://ads.example.com/frame">嵌入内容 ↗</a></p>"""
+        val html = ReaderHtml.build(article("https://www.dapenti.com/blog/more.asp?id=1"), body, Settings(), LightColors, 0, 0)
+        assertTrue(html, html.contains("""<p><iframe src="https://h5.video.weibo.com/show/1034:5356719388426257" allowfullscreen></iframe></p>"""))
+        assertTrue(html, html.contains("""<iframe src="https://player.bilibili.com/player.html?aid=1&amp;p=1" allowfullscreen>"""))
+        assertTrue(html, html.contains("""<a href="https://ads.example.com/frame">嵌入内容 ↗</a>"""))
+    }
 }

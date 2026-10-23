@@ -289,6 +289,73 @@ class ReaderTest {
         }
     }
 
+    /** 盖在 decorView 上的全屏视频层。 */
+    private fun fullscreenOverlay(): View? {
+        var found: View? = null
+        scenario!!.onActivity { found = it.window.decorView.findViewWithTag(io.github.xccxcxxc.runnel.ui.reader.WebViewPool.FULLSCREEN_TAG) }
+        return found
+    }
+
+    /**
+     * 播放器点全屏（虎嗅、喷嚏的视频文章，2026-10-23）：以前没有 WebChromeClient，点了没反应。
+     * 现在全屏层盖住整个屏幕；返回键先退出全屏，还留在阅读页。
+     */
+    @Test
+    fun fullscreenCoversScreenAndBackExits() {
+        // 系统第一次隐藏系统栏时会弹“Viewing full screen”提示、抢走焦点（真机也一样，只弹一次），测试里当成已经看过
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("settings put secure immersive_mode_confirmations confirmed").close()
+        // 页面每载入一次 loads 加一（sessionStorage 重新载入后还在）
+        openArticle(
+            "<script>sessionStorage.loads=(+sessionStorage.loads||0)+1</script>" +
+                "<p>正文</p><div id=\"fs\" style=\"height:200px;background:#08f\" onclick=\"this.requestFullscreen()\">全屏</div>",
+        )
+        Thread.sleep(500)
+        val loads = js("sessionStorage.loads")
+        tapInWebView("#fs")
+        waitFor { fullscreenOverlay()?.isAttachedToWindow == true }
+        var covers = false
+        scenario!!.onActivity { covers = fullscreenOverlay()!!.width == it.window.decorView.width && fullscreenOverlay()!!.height == it.window.decorView.height }
+        assertTrue("全屏层没有盖满屏幕", covers)
+        // 系统栏隐藏、转横屏后留白变了：只改 CSS，不能重新载入（以前一重新载入就被踢出全屏）
+        Thread.sleep(1500)
+        assertTrue("全屏后被踢出来了", fullscreenOverlay()?.isAttachedToWindow == true)
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
+        waitFor { fullscreenOverlay() == null }
+        waitFor { js("document.fullscreenElement==null") == "true" }
+        rule.onNodeWithTag("reader_pager").assertExists()
+        assertEquals("进出全屏时页面重新载入了", loads, js("sessionStorage.loads"))
+    }
+
+    /**
+     * 嵌入的播放器（微博、B 站）是单页应用，要用 localStorage：以前关了 DOM 存储，iframe 里一用就抛异常、播放器白屏。
+     * 播放器和正文不同域，还要能存自己的 Cookie。
+     */
+    @Test
+    fun embeddedPlayerFrameCanUseStorage() {
+        val server = mockwebserver3.MockWebServer()
+        server.start()
+        try {
+            server.enqueue(
+                mockwebserver3.MockResponse.Builder()
+                    .headers(okhttp3.Headers.headersOf("Content-Type", "text/html; charset=utf-8"))
+                    .body("<script>var r;try{localStorage.setItem('k','v');r='ok:'+localStorage.getItem('k')}catch(e){r='err:'+e}parent.postMessage(r,'*')</script>")
+                    .build(),
+            )
+            openArticle(
+                "<script>addEventListener('message',function(e){document.body.setAttribute('data-frame',e.data)})</script>" +
+                    "<p>正文</p><iframe src=\"${server.url("/player")}\" allowfullscreen></iframe>",
+            )
+            waitFor { js("document.body.getAttribute('data-frame')") != "null" }
+            assertEquals("\"ok:v\"", js("document.body.getAttribute('data-frame')"))
+            var thirdParty = false
+            scenario!!.onActivity { thirdParty = android.webkit.CookieManager.getInstance().acceptThirdPartyCookies(findWebView(it.window.decorView)!!) }
+            assertTrue("嵌入的播放器存不了 Cookie", thirdParty)
+        } finally {
+            server.close()
+        }
+    }
+
     private fun scrolledDeep(): WebView {
         openArticle((1..300).joinToString("") { "<p>第 $it 段正文，后面还有一些文字凑够一行。</p>" }, second = true)
         assertTrue(onFirstArticle())

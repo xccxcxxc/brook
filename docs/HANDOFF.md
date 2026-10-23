@@ -17,6 +17,12 @@
 
 ## 1. 当前状态（2026-10-23）
 
+- **阅读页视频**（1.0 之后，2026-10-23，用户还没真机测）：喷嚏图卦、虎嗅的视频打不开。
+  - 喷嚏：正文里是微博视频 / B 站 / 喷嚏自己的音频卡片 iframe，`ArticleProcessor` 以前只放行 YouTube 等，其余换成“嵌入内容 ↗”链接。现在放行国内视频站和与文章同主机的 iframe（`ArticleProcessor.embeddable`，按主机名后缀，不看整个地址），视频站的 http 改 https；旧文章里的链接由 `ReaderHtml.restoreEmbeds` 显示时换回播放器。iframe 按 width/height 定宽高比。
+  - 虎嗅：视频文章 RSS 只有一句摘要，mp4 在原网页的 Nuxt 数据里。`content/PageVideo`：虎嗅文章正文很短、没有图片时自动抓原网页（`ReaderState.autoFullText`），全文 = `<video>`（720p + 封面）+ 网页简介，不走 Readability（会把 logo、“下载虎嗅APP”当正文）。
+  - `WebViewPool`：开 DOM 存储（微博/B 站播放器没有 localStorage 就白屏）、允许第三方 Cookie、`FullscreenChrome`（全屏层盖在 decorView 上、隐藏系统栏、横屏，返回键退出）。`MainActivity` 加了 `configChanges`（转屏不重建）。正文上下留白改成 CSS 变量、变化时用脚本改（`ReaderHtml.paddingScript`），**不能放进 HTML 的 remember key**：全屏时系统栏隐藏、留白一变就重新载入，播放器立刻被踢出全屏。
+  - 模拟器上实测：微博、B 站播放器和喷嚏音频卡片正常显示，虎嗅视频点了能播。系统第一次隐藏系统栏会弹“Viewing full screen”提示、抢焦点，测试里用 `settings put secure immersive_mode_confirmations confirmed` 跳过。
+
 - **Runnel 1.0 已发布**（2026-10-23）：公开仓库的第一个正式 Release `v1.0`（附 `Runnel-1.0.apk`，正式签名 CN=Runnel）。包名改为 `io.github.xccxcxxc.runnel`，不能覆盖升级旧的 Brook 包。下文的 1.0.0–2.1 是私有仓库 `brook-private` 的旧版本号，对应功能都已包含在 Runnel 1.0。
 - **2.1 已发布**（2026-10-20）：GitHub 正式 Release `v2.1`（https://github.com/xccxcxxc/brook-private/releases/tag/v2.1，附 `Brook-2.1.apk`，versionCode 74，正式签名，目标提交 `00904de`）；发布时手机没连，没用 adb 装。相对 2.0：离线图片按订阅源、图片缓存 500MB、srcset 挑图、进列表首帧优化、演示数据 200 篇。用户已在真机验证离线图片和首帧优化。
 - **2.0 之后（已含在 2.1，测试包 `Brook-0.1.68.apk` 已装到用户手机）**（2026-10-20）：离线图片——设置 → 账号 → 离线图片按订阅源勾选（`Settings.offlineImageFeeds`，默认空）；`content/OfflineImages` 在每次同步成功后（`SyncEngine` 的 `afterSync`）和改勾选时，把勾选订阅源里未读和星标文章（`ArticleDao.offlineCandidateIds`）正文 html/fullHtml 的 `<img src>` 用 `ReaderImageCache.prefetch` 下进同一个缓存（上限 200→500MB），4 并发，连续失败 8 次当没网停下；`SyncWorker` 会等它下完。不限 Wi-Fi、不预抓全文（用户的 RSS 本身是全文）都是用户的决定。为了预下载和显示用同一个地址：同步时 `ArticleProcessor.pickSrcset` 从 srcset 挑一张（宽度描述取 ≥1200w 的最小一张）写进 src，`ReaderHtml` 显示时去掉所有 srcset。测试：单元测试（srcset 解析、预下载后断网命中、地址补全）、仪器测试 `OfflineImagesTest`（只下勾选订阅源的未读/星标、设置页勾选）。用户还没真机测。下一步：测“点进订阅源第一帧偏重”。

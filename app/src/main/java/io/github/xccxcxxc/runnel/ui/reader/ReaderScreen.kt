@@ -79,6 +79,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.xccxcxxc.runnel.AppGraph
 import io.github.xccxcxxc.runnel.Graph
+import io.github.xccxcxxc.runnel.content.PageVideo
 import io.github.xccxcxxc.runnel.data.ArticleSource
 import io.github.xccxcxxc.runnel.data.Settings
 import io.github.xccxcxxc.runnel.data.db.ReaderArticle
@@ -164,13 +165,16 @@ class ReaderState(private val graph: AppGraph, private val scope: CoroutineScope
         return a
     }
 
-    /** 订阅源设为默认用 Reader View 打开时，停在这篇文章就自动抓取并显示全文（每篇只自动一次，手动切回后不再强开）。 */
+    /**
+     * 订阅源设为默认用 Reader View 打开时，停在这篇文章就自动抓取并显示全文（每篇只自动一次，手动切回后不再强开）。
+     * 虎嗅的视频文章正文只有一句摘要，视频在原网页里，也自动抓（[PageVideo]）。
+     */
     private val autoTried = HashSet<Long>()
 
     suspend fun autoFullText(id: Long) {
         if (id in autoTried) return
         val article = load(id) ?: return
-        if (!graph.prefs.settings.value.autoReaderView(article.feedId)) return
+        if (!graph.prefs.settings.value.autoReaderView(article.feedId) && !PageVideo.shouldFetch(article.url, article.html)) return
         autoTried += id
         if (showFull[id] != true && article.url != null) toggleFullText(article)
     }
@@ -407,8 +411,13 @@ private fun ArticlePage(id: Long, isCurrent: Boolean, state: ReaderState, settin
     val article by produceState<ReaderArticle?>(null, id) { value = state.load(id) }
     val full = state.showFull[id] == true
     val body = (if (full) state.fullText[id] else null) ?: article?.html.orEmpty()
-    val html = remember(article, body, settings, colors, topPad, bottomPad, ready) {
+    // 上下留白不算进 key：全屏看视频时系统栏隐藏、屏幕转横，留白跟着变，重新载入会把播放器踢出全屏（转屏也会丢掉正文状态），
+    // 只用脚本改 CSS 变量
+    val html = remember(article, body, settings, colors, ready) {
         if (!ready) null else article?.let { ReaderHtml.build(it, body, settings, colors, topPad, bottomPad) }
+    }
+    LaunchedEffect(topPad, bottomPad) {
+        state.webViews[id]?.evaluateJavascript(ReaderHtml.paddingScript(topPad, bottomPad), null)
     }
     val bg = colors.background.toArgb()
     val restore = remember(id) { ScrollRestore(ReaderScrollMemory[id]) }

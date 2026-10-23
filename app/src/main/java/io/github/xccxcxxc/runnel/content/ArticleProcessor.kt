@@ -20,7 +20,7 @@ data class ProcessedContent(
  * 同步时对正文做一次性处理（在后台线程），阅读和滚动时不再解析 HTML：
  * - 懒加载图片的 data-src 等属性还原成 src；有 srcset 时挑一个适合手机屏幕的写进 src（阅读页只用 src，离线图片也只下 src）
  * - 去掉跟踪像素、脚本、内联样式（内联颜色会破坏深色模式）
- * - 相对链接转绝对地址；只保留常见视频站的 iframe
+ * - 相对链接转绝对地址；iframe 只保留常见视频站的播放器和文章所在网站自己的嵌入（[embeddable]）
  * - 生成纯文本摘要、挑缩略图、估算阅读时长
  */
 object ArticleProcessor {
@@ -31,8 +31,12 @@ object ArticleProcessor {
         "feeds.feedburner.com/~r", "feedburner.com/~ff", "pixel.wp.com", "stats.wordpress.com",
         "/feed-stats", "doubleclick.net", "google-analytics.com", "/pixel.gif", "/tracking/", "feedsportal.com",
     )
+    /** 主机名后缀，可带路径前缀（weibo.com/tv）。 */
     private val allowedIframeHosts = listOf(
         "youtube.com", "youtube-nocookie.com", "player.vimeo.com", "player.bilibili.com", "w.soundcloud.com",
+        // 国内视频站：喷嚏图卦等常嵌微博视频（2026-10-23）
+        "video.weibo.com", "weibo.com/tv", "v.qq.com", "player.youku.com", "ixigua.com", "open.iqiyi.com",
+        "player.douyin.com", "open.douyin.com",
     )
 
     private val safelist: Safelist = Safelist.relaxed()
@@ -42,7 +46,7 @@ object ArticleProcessor {
         )
         .addAttributes("img", "srcset", "sizes", "width", "height", "alt", "title")
         .addAttributes("source", "src", "srcset", "type", "media", "sizes")
-        .addAttributes("video", "src", "poster", "controls", "width", "height")
+        .addAttributes("video", "src", "poster", "controls", "width", "height", "preload", "playsinline")
         .addAttributes("audio", "src", "controls")
         .addAttributes("iframe", "src", "width", "height", "allowfullscreen", "frameborder", "allow")
         .addAttributes("code", "class")
@@ -87,14 +91,44 @@ object ArticleProcessor {
         }
         doc.select("img:not([src]), img[src=''], img[src^=data:]").remove()
         for (iframe in doc.select("iframe")) {
-            val src = iframe.absUrl("src")
-            if (allowedIframeHosts.none { src.contains(it) }) {
-                if (src.isNotBlank()) iframe.replaceWith(Element("p").appendElement("a").attr("href", src).text("嵌入内容 ↗").parent()!!)
-                else iframe.remove()
+            // 协议相对地址（//player.bilibili.com/…）没有原文地址时也补成 https
+            var src = iframe.absUrl("src").ifBlank { iframe.attr("src").takeIf { it.startsWith("//") }?.let { "https:$it" }.orEmpty() }
+            // 视频站都支持 https；喷嚏的文章地址是 http，协议相对的 B 站地址会跟着变成 http
+            if (src.startsWith("http://") && runCatching { java.net.URI(src) }.getOrNull()?.let { isVideoSite(it.host.orEmpty().lowercase(), it.rawPath.orEmpty()) } == true) {
+                src = "https://" + src.removePrefix("http://")
+            }
+            if (embeddable(src, doc.location())) {
+                iframe.attr("src", src)
+                iframe.attr("allowfullscreen", "")
+            } else if (src.isNotBlank()) {
+                iframe.replaceWith(Element("p").appendElement("a").attr("href", src).text(EMBED_LINK_TEXT).parent()!!)
+            } else {
+                iframe.remove()
             }
         }
         // 只剩空白的段落、空链接
         doc.select("p:matchesOwn(^\\s*$):not(:has(*))").remove()
+    }
+
+    /** 放不进阅读页的 iframe 换成的链接文字；[io.github.xccxcxxc.runnel.ui.reader.ReaderHtml] 显示时会把现在能放的换回播放器。 */
+    const val EMBED_LINK_TEXT = "嵌入内容 ↗"
+
+    /**
+     * 这个 iframe 能不能留在正文里：常见视频站的播放器，或者和文章同一个主机的嵌入
+     * （喷嚏图卦的音频卡片和文章都在 www.dapenti.com 上）。只认 http(s)。
+     */
+    fun embeddable(src: String, articleUrl: String?): Boolean {
+        val uri = runCatching { java.net.URI(src) }.getOrNull() ?: return false
+        if (uri.scheme != "http" && uri.scheme != "https") return false
+        val host = uri.host?.lowercase() ?: return false
+        if (isVideoSite(host, uri.rawPath.orEmpty())) return true
+        val articleHost = articleUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() }?.lowercase() ?: return false
+        return host.removePrefix("www.") == articleHost.removePrefix("www.")
+    }
+
+    private fun isVideoSite(host: String, path: String) = allowedIframeHosts.any { entry ->
+        val h = entry.substringBefore('/')
+        (host == h || host.endsWith(".$h")) && path.startsWith(entry.removePrefix(h))
     }
 
     /**

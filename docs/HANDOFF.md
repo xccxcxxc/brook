@@ -17,7 +17,7 @@
 
 ## 1. 当前状态（2026-10-24）
 
-- **Runnel 1.12**（2026-10-24，用户还没真机测）：相对 1.11 一项——再次打开刚读过的文章直接在原处，不重新载入、不滚动。用户嫌 1.11 的“盖住再露出”还是不够直接。
+- **Runnel 1.12 已发布**（2026-10-24）：正式 Release `v1.12`（https://github.com/xccxcxxc/runnel/releases/tag/v1.12，附 `Runnel-1.12.apk`，versionCode 215，正式签名 CN=Runnel，目标提交 `cf98b72`），可覆盖安装 1.11，用户还没真机测。相对 1.11 一项——再次打开刚读过的文章直接在原处，不重新载入、不滚动。用户嫌 1.11 的“盖住再露出”还是不够直接。
   - `WebViewPool.park/takeParked`：退出阅读页时，当前那篇（`ArticlePage` 释放时 `isCurrent` 为真且已恢复完）的 WebView 不清空，暂停媒体、`onPause` 后留在内存，最多 2 篇（用户定的），多了按最久的回收。翻页时滑出去的相邻页照常回收。
   - 再打开同一篇：`ArticlePage` 先 `takeParked`，有就直接用，`ScrollRestore.target` 为 0（不恢复、不遮盖）。如果期间改了字号、样式，新 HTML 和留着的不一样，只能重新载入，按它原来的 scrollY 走 1.11 的恢复流程。被挤出去的文章仍靠 `ReaderScrollMemory` + 恢复流程。
   - 已知：每次进阅读页 `ReaderState` 是新的，手动切过全文的文章再进是摘要（以前就这样），这时 HTML 对不上，也走重新载入恢复。

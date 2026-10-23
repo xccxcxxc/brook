@@ -15,8 +15,9 @@
 - 本地 `origin` = 公开仓库（推送用 gh 的凭据，token 需要 `workflow` 权限），`private` = 私有仓库。
 - 签名：2026-10-23 起包名改为 `io.github.xccxcxxc.runnel`，换了新证书（CN=Runnel）；旧包 `io.github.xccxcxxc.brook` 不能覆盖升级，需手动卸载。公开仓库的 Secrets 是 `RUNNEL_KEYSTORE_B64` / `RUNNEL_KEYSTORE_PASSWORD`，旧的 `BROOK_*` 已弃用，可删。
 
-## 1. 当前状态（2026-10-20）
+## 1. 当前状态（2026-10-23）
 
+- **Runnel 1.0 已发布**（2026-10-23）：公开仓库的第一个正式 Release `v1.0`（附 `Runnel-1.0.apk`，正式签名 CN=Runnel）。包名改为 `io.github.xccxcxxc.runnel`，不能覆盖升级旧的 Brook 包。下文的 1.0.0–2.1 是私有仓库 `brook-private` 的旧版本号，对应功能都已包含在 Runnel 1.0。
 - **2.1 已发布**（2026-10-20）：GitHub 正式 Release `v2.1`（https://github.com/xccxcxxc/brook-private/releases/tag/v2.1，附 `Brook-2.1.apk`，versionCode 74，正式签名，目标提交 `00904de`）；发布时手机没连，没用 adb 装。相对 2.0：离线图片按订阅源、图片缓存 500MB、srcset 挑图、进列表首帧优化、演示数据 200 篇。用户已在真机验证离线图片和首帧优化。
 - **2.0 之后（已含在 2.1，测试包 `Brook-0.1.68.apk` 已装到用户手机）**（2026-10-20）：离线图片——设置 → 账号 → 离线图片按订阅源勾选（`Settings.offlineImageFeeds`，默认空）；`content/OfflineImages` 在每次同步成功后（`SyncEngine` 的 `afterSync`）和改勾选时，把勾选订阅源里未读和星标文章（`ArticleDao.offlineCandidateIds`）正文 html/fullHtml 的 `<img src>` 用 `ReaderImageCache.prefetch` 下进同一个缓存（上限 200→500MB），4 并发，连续失败 8 次当没网停下；`SyncWorker` 会等它下完。不限 Wi-Fi、不预抓全文（用户的 RSS 本身是全文）都是用户的决定。为了预下载和显示用同一个地址：同步时 `ArticleProcessor.pickSrcset` 从 srcset 挑一张（宽度描述取 ≥1200w 的最小一张）写进 src，`ReaderHtml` 显示时去掉所有 srcset。测试：单元测试（srcset 解析、预下载后断网命中、地址补全）、仪器测试 `OfflineImagesTest`（只下勾选订阅源的未读/星标、设置页勾选）。用户还没真机测。下一步：测“点进订阅源第一帧偏重”。
 - **Baseline Profile 不用再生成**（2026-10-20 试过）：在 brook36 上用 BaselineProfileGenerator 生成了 1 万条规则（benchmark 构建要 -dontobfuscate 才是原始名），但编进 APK 的二进制配置文件和手写版几乎一样大（5.0 vs 5.4KB）——库自带的配置 + 手写的 App 通配规则已经覆盖；真机上整个 App 全编译也只让进列表最重一帧从 29ms 降到约 18ms。用户决定不要。生成一次要 6.6 分钟（每轮“滚动列表”20 秒都在 waitForIdle 等空闲）。另外：演示数据默认 5000 → 200 篇，且不再逐篇走 ArticleProcessor；AGP 9 的 `-P...class=A,B` 只认第一个类，`connected-test.ps1` 会拆开逐个跑。
@@ -45,7 +46,7 @@
 ## 3. 发版本
 
 - **只有用户明确说发布并给出版本号时才发**，版本号以用户给的为准，不自己推断或递增。
-- `app/build.gradle.kts` 的 `versionName` 现在固定是 `2.1`（之后 CI 的 `latest` 测试包也显示 2.1，靠 versionCode = 100 + 提交数区分）；发下一版时改成用户给的版本号。
+- `app/build.gradle.kts` 的 `versionName` 现在固定是 `1.0`（2026-10-23 改名 Runnel 后的第一个正式版；之后 CI 的 `latest` 测试包也显示 1.0，靠 versionCode = 100 + 提交数区分）；发下一版时改成用户给的版本号。
 - 发法：改版本号提交推送 → 本地 `assembleRelease`、验签 → `gh release create v<版本> Runnel-<版本>.apk --title "Runnel <版本>" --notes-file <说明> --target <完整 SHA>`（短 SHA 会报 422）（正式版，不是 prerelease）。CI 只在推 `main` 时跑，不会覆盖 tag 的 Release。
 - 更新说明写功能总览 + 相对上一版的改动 + 已知问题（1.0.0 的说明在 Release 页面）。
 

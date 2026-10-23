@@ -52,7 +52,7 @@
 ## 3. 发版本
 
 - **只有用户明确说发布并给出版本号时才发**，版本号以用户给的为准，不自己推断或递增。
-- `app/build.gradle.kts` 的 `versionName` 现在固定是 `1.0`（2026-10-23 改名 Runnel 后的第一个正式版；之后 CI 的 `latest` 测试包也显示 1.0，靠 versionCode = 100 + 提交数区分）；发下一版时改成用户给的版本号。
+- `app/build.gradle.kts` 的 `versionName` 现在是 `1.1`（2026-10-23 发布；之后 CI 的 `latest` 测试包也显示 1.1，靠 versionCode = 200 + 提交数区分）；发下一版时改成用户给的版本号。
 - 发法：改版本号提交推送 → 本地 `assembleRelease`、验签 → `gh release create v<版本> Runnel-<版本>.apk --title "Runnel <版本>" --notes-file <说明> --target <完整 SHA>`（短 SHA 会报 422）（正式版，不是 prerelease）。CI 只在推 `main` 时跑，不会覆盖 tag 的 Release。
 - 更新说明写功能总览 + 相对上一版的改动 + 已知问题（1.0.0 的说明在 Release 页面）。
 

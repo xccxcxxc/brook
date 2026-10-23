@@ -28,17 +28,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Restore signing key
         env:
-          KEYSTORE_B64: ${{ secrets.BROOK_KEYSTORE_B64 }}
+          KEYSTORE_B64: ${{ secrets.RUNNEL_KEYSTORE_B64 }}
         run: |
           if [ -n "$KEYSTORE_B64" ]; then
-            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/brook.jks"
-            echo "BROOK_KEYSTORE=$RUNNER_TEMP/brook.jks" >> "$GITHUB_ENV"
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/runnel.jks"
+            echo "RUNNEL_KEYSTORE=$RUNNER_TEMP/runnel.jks" >> "$GITHUB_ENV"
           fi
       - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest
       - name: Build release APK and AAB
         env:
-          BROOK_KEYSTORE_PASSWORD: ${{ secrets.BROOK_KEYSTORE_PASSWORD }}
+          RUNNEL_KEYSTORE_PASSWORD: ${{ secrets.RUNNEL_KEYSTORE_PASSWORD }}
         run: ./gradlew :app:assembleRelease :app:bundleRelease
       - name: Publish rolling "latest" release
         env:

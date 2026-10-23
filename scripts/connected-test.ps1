@@ -1,9 +1,9 @@
 # 在模拟器 brook36 上跑仪器测试，默认最多 3 分钟（全套约 2 分钟；任何情况都不许超过 10 分钟）：到时间直接杀掉模拟器和 Gradle。
 #   pwsh scripts/connected-test.ps1                                  全部
-#   pwsh scripts/connected-test.ps1 -Class io.github.xccxcxxc.brook.ReaderTest
-#   pwsh scripts/connected-test.ps1 -Class "io.github.xccxcxxc.brook.ReaderTest#tapTitleOpensOriginal,io.github.xccxcxxc.brook.DatabaseTest"
+#   pwsh scripts/connected-test.ps1 -Class io.github.xccxcxxc.runnel.ReaderTest
+#   pwsh scripts/connected-test.ps1 -Class "io.github.xccxcxxc.runnel.ReaderTest#tapTitleOpensOriginal,io.github.xccxcxxc.runnel.DatabaseTest"
 # 只在 brook36 上跑（ANDROID_SERIAL），手机连着也不会被装 debug 包。
-#   pwsh scripts/connected-test.ps1 -Task :benchmark:connectedBenchmarkAndroidTest -Class io.github.xccxcxxc.brook.benchmark.BaselineProfileGenerator
+#   pwsh scripts/connected-test.ps1 -Task :benchmark:connectedBenchmarkAndroidTest -Class io.github.xccxcxxc.runnel.benchmark.BaselineProfileGenerator
 param([string]$Class = "", [int]$Minutes = 3, [string]$Task = ":app:connectedDebugAndroidTest")
 
 $root = Split-Path $PSScriptRoot -Parent

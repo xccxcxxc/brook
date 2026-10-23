@@ -29,7 +29,7 @@ ui/        Compose 界面：nav（自写页面栈+转场）、home、list、read
 data/      Room（db/）、Prefs、ArticleRepository、FlagStore（本次运行的已读/星标覆盖层）
 sync/      SyncEngine（同步流程）、greader/（GReader API 客户端）、SyncWorker、DemoData
 content/   ArticleProcessor（jsoup 清洗/摘要/缩略图/阅读时长）、FullTextFetcher（Readability）
-perf/      PerfMonitor（JankStats/StrictMode；按页面、按操作〔推入/返回/下一个订阅源/滚动/同步〕统计，记最近 12 次卡顿；release 包 logcat 标签 BrookPerf）、RefreshRate
+perf/      PerfMonitor（JankStats/StrictMode；按页面、按操作〔推入/返回/下一个订阅源/滚动/同步〕统计，记最近 12 次卡顿；release 包 logcat 标签 RunnelPerf）、RefreshRate
 ```
 
 - **列表快照**：打开列表时一次查出轻量字段（正文不进列表查询），之后不随数据库变化重排；行上的已读/星标以 `FlagStore` 为准。同步有新文章时显示“N 篇新文章”，点了才换新快照。

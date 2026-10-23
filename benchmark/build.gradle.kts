@@ -4,7 +4,7 @@ plugins {
 
 // 在真机上跑：scripts/perf.sh bench | profile（需要 adb 连上手机）
 android {
-    namespace = "io.github.xccxcxxc.brook.benchmark"
+    namespace = "io.github.xccxcxxc.runnel.benchmark"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {

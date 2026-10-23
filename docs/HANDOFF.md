@@ -13,7 +13,7 @@
 - **之后不要往仓库里放**：别的 App 的截图、图标、从安装包里提取的文件、品牌名；本机路径、账号、设备信息。
 - versionCode = 200 + 提交数（`app/build.gradle.kts`）：公开仓库的历史压成过 1 个提交，加 200 保证比之前所有的包（私有仓库时期和公开仓库早期，最大 110）都大，手机上可以直接覆盖安装。
 - 本地 `origin` = 公开仓库（推送用 gh 的凭据，token 需要 `workflow` 权限），`private` = 私有仓库。
-- 签名：公开仓库的 Secrets `BROOK_KEYSTORE_B64` / `BROOK_KEYSTORE_PASSWORD` 和以前是同一把证书，包名不变。
+- 签名：2026-10-23 起包名改为 `io.github.xccxcxxc.runnel`，换了新证书（CN=Runnel）；旧包 `io.github.xccxcxxc.brook` 不能覆盖升级，需手动卸载。公开仓库的 Secrets 是 `RUNNEL_KEYSTORE_B64` / `RUNNEL_KEYSTORE_PASSWORD`，旧的 `BROOK_*` 已弃用，可删。
 
 ## 1. 当前状态（2026-10-20）
 
@@ -52,7 +52,7 @@
 ## 4. 构建、发布、测试（命令见 `CLAUDE.md`）
 
 - 推 `main` → GitHub Actions（`.github/workflows/build.yml`）：单元测试 + release APK，发布到滚动的 `latest` prerelease；Release 说明 = 自上一个包以来的提交标题和正文。连续推送时旧构建被取消（“已取消”不是故障）。
-- 签名：CI 用 Secrets（`BROOK_KEYSTORE_B64` / `BROOK_KEYSTORE_PASSWORD`），本地用 `%USERPROFILE%\.android\brook-release.properties`，同一把证书（CN=Brook）。**不要换证书、不要改包名**；debug 签名的包不能给用户。
+- 签名：CI 用 Secrets（`RUNNEL_KEYSTORE_B64` / `RUNNEL_KEYSTORE_PASSWORD`），本地用 `%USERPROFILE%\.androidunnel-release.properties`，同一把证书（CN=Runnel）。**不要换证书、不要改包名**（上架 Play 后也改不了）；debug 签名的包不能给用户。
 - 单元测试（`app/src/test`，Robolectric + 纯逻辑）：`ListFilterTest`、`ReaderViewTest`、`ReaderLinkTest`、`PullFromBottomTest`、`GReaderApiTest`（MockWebServer）、`OpmlTest`、`ArticleProcessorTest`。
 - 模拟器仪器测试（`app/src/androidTest`，21 个）：`ListGesturesTest`（上拉/按钮标已读并离开、全已读直接离开、短列表回弹、下一个订阅源从下往上进场、上拉进入下一个订阅源时标已读、长按菜单位置和以上/以下标已读、菜单边界和点外面收起）、`ReaderTest`（快速一划不切篇、拉够才切、真实 WebView 点标题打开原文、表情尺寸、图片下不显示域名、“…”面板改设置即时生效、图片走自己的缓存、WebView 焦点/区域请求不翻页）、`DatabaseTest`（事务回滚、分块标已读、离线队列、WAL 并发读）。只跑一个类：加 `"-Pandroid.testInstrumentationRunnerArguments.class=io.github.xccxcxxc.brook.ReaderTest"`；结果在 `app\build\outputs\androidTest-results\connected\debug\`。
 - 性能只用 release 包判断：真机见 `docs/DEVICE.md`，脚本 `scripts/perf.sh`。
@@ -60,11 +60,11 @@
 ## 5. 代码地图
 
 - `data/Prefs.kt`：`Settings` 和所有设置枚举。**新增设置改四处**：`Settings` 字段、`updateSettings` 的 put、`readSettings` 的 get、设置页。
-- `data/db/BrookDatabase.kt`：Room + 系统 SQLite；事务一律 `db.inTransaction { }`，块里只调 suspend 的 DAO。
+- `data/db/RunnelDatabase.kt`：Room + 系统 SQLite；事务一律 `db.inTransaction { }`，块里只调 suspend 的 DAO。
 - `ui/nav/`：自写页面栈（组合栈顶三层）。`push` 横向推入；`replaceTop`（下一个订阅源）从下往上进场（`NavEntry.enterFromBottom`），结束后移除旧页。
 - `ui/components/LargeTitleList.kt`：大标题列表；内容不满一屏时末尾垫高 1px，让短列表也有回弹。
 - `ui/list/ArticleListScreen.kt`：分组、缩略图、侧滑、长按菜单（`ui/components/ContextMenu.kt`，行的位置取 `layoutInfo` 的 `offset - viewportStartOffset`）、Filter、从底部上拉、全部标为已读（`leave()`：先导航再写库）。
-- `ui/reader/`：`ReaderScreen`（自动隐藏栏、Reader View、拉动切篇）、`ReaderHtml`（CSS；标题链到 `brook://open?u=`；表情图片按 src/alt 识别成行内；包着图片的链接不显示域名）、`WebViewPool`、`ReaderStylePanel`（“…”面板）。
+- `ui/reader/`：`ReaderScreen`（自动隐藏栏、Reader View、拉动切篇）、`ReaderHtml`（CSS；标题链到 `runnel://open?u=`；表情图片按 src/alt 识别成行内；包着图片的链接不显示域名）、`WebViewPool`、`ReaderStylePanel`（“…”面板）。
 - `ui/settings/`：`SettingsSheet`（全部设置页）、`ReaderStyle`（阅读样式控件，设置页和“…”面板共用）；组件在 `ui/components/Grouped.kt`。
 - 设置项按用户给的截图；**猜的选项**（用户给图就改）：动画速度 0.7×/1×/1.5×/2.2×、阅读字体默认/衬线/等宽、图片预览关闭/小/中/大。**有意没做**：Unread count badge、List selection style、Landscape、Dim archived、Services/Support/About、Add to Reading List、Bionic Reading。
 

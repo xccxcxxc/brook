@@ -12,18 +12,18 @@ import java.util.Properties
 val buildNumber: Int = providers.exec { commandLine("git", "rev-list", "--count", "HEAD"); isIgnoreExitValue = true }
     .standardOutput.asText.get().trim().toIntOrNull() ?: 0
 
-// 发布签名：CI 用 Secrets 还原的证书（BROOK_KEYSTORE 等环境变量），本机用仓库外的 ~/.android/brook-release.properties；
+// 发布签名：CI 用 Secrets 还原的证书（RUNNEL_KEYSTORE 等环境变量），本机用仓库外的 ~/.android/runnel-release.properties；
 // 两边是同一把证书，包可以互相覆盖安装。都没有时退回 debug 证书（别人克隆也能编译）。
-val ciKeystore: String? = System.getenv("BROOK_KEYSTORE")
-val localSigning: Properties? = File(System.getProperty("user.home"), ".android/brook-release.properties")
+val ciKeystore: String? = System.getenv("RUNNEL_KEYSTORE")
+val localSigning: Properties? = File(System.getProperty("user.home"), ".android/runnel-release.properties")
     .takeIf { it.isFile }?.let { f -> Properties().apply { f.reader(Charsets.UTF_8).use { load(it) } } }
 
 android {
-    namespace = "io.github.xccxcxxc.brook"
+    namespace = "io.github.xccxcxxc.runnel"
     compileSdk = libs.versions.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "io.github.xccxcxxc.brook"
+        applicationId = "io.github.xccxcxxc.runnel"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         // 公开仓库的历史在 2026-10-21 压成了 1 个提交、提交数重新计数；加 200 保证比之前发过的所有包（最大 110）都大，可以覆盖安装
@@ -35,14 +35,14 @@ android {
 
     signingConfigs {
         if (ciKeystore != null) {
-            create("brook") {
+            create("runnel") {
                 storeFile = file(ciKeystore)
-                storePassword = System.getenv("BROOK_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("BROOK_KEY_ALIAS") ?: "brook"
-                keyPassword = System.getenv("BROOK_KEYSTORE_PASSWORD")
+                storePassword = System.getenv("RUNNEL_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("RUNNEL_KEY_ALIAS") ?: "runnel"
+                keyPassword = System.getenv("RUNNEL_KEYSTORE_PASSWORD")
             }
         } else if (localSigning != null) {
-            create("brook") {
+            create("runnel") {
                 storeFile = file(localSigning.getProperty("storeFile"))
                 storePassword = localSigning.getProperty("storePassword")
                 keyAlias = localSigning.getProperty("keyAlias")
@@ -55,7 +55,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.findByName("brook") ?: signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("runnel") ?: signingConfigs.getByName("debug")
         }
         // macrobenchmark / baseline profile 用：与 release 相同的优化，但可被 shell profile
         create("benchmark") {

@@ -83,6 +83,8 @@ import io.github.xccxcxxc.runnel.content.PageVideo
 import io.github.xccxcxxc.runnel.data.ArticleSource
 import io.github.xccxcxxc.runnel.data.Settings
 import io.github.xccxcxxc.runnel.data.db.ReaderArticle
+import io.github.xccxcxxc.runnel.ui.components.ActionSheet
+import io.github.xccxcxxc.runnel.ui.components.SheetAction
 import io.github.xccxcxxc.runnel.ui.components.BarButton
 import io.github.xccxcxxc.runnel.ui.components.BarHeight
 import io.github.xccxcxxc.runnel.ui.components.BottomToolbar
@@ -118,6 +120,9 @@ private object ReaderScrollMemory {
 /** 一个 ArticlePage 的滚动恢复状态：[target] 是待恢复的位置，[settled] 为 true 才允许在释放时保存（还没恢复完就退出，别把旧位置覆盖成 0）。 */
 private class ScrollRestore(var target: Int) {
     var settled = target <= 0
+
+    /** 正文是否可以露出来：要恢复位置时，先用背景色盖住 WebView，滚到位再露出，免得先看到顶部再跳过去。 */
+    var revealed by mutableStateOf(target <= 0)
 }
 
 /** 阅读页状态：已加载文章的缓存、全文模式、提示消息、拉动切篇的位移。 */
@@ -421,49 +426,95 @@ private fun ArticlePage(id: Long, isCurrent: Boolean, state: ReaderState, settin
     }
     val bg = colors.background.toArgb()
     val restore = remember(id) { ScrollRestore(ReaderScrollMemory[id]) }
-    // 第一次载入正文后滚回上次退出时的位置：图片还没撑开高度时 scrollTo 会被截短，所以隔一会儿重试，到位或用户自己动了手就停
+    // 第一次载入正文后滚回上次退出时的位置：图片还没撑开高度时 scrollTo 会被截短，所以隔一会儿重试，到位或用户自己动了手就停。
+    // 恢复期间正文被背景色盖住，到位后一次性露出（最多盖 0.8 秒，之后仍在后台继续重试）
     LaunchedEffect(html) {
         if (html == null || restore.target <= 0) return@LaunchedEffect
         val target = restore.target
         restore.target = 0
         try {
             var lastSet = -1
-            for (attempt in 0 until 14) {
-                delay(150)
+            for (attempt in 0 until 40) {
+                delay(50)
                 val web = state.webViews[id] ?: break
                 val y = web.scrollY
                 if (y >= target - 2) break
                 if (lastSet >= 0 && y != lastSet && y != 0) break // 用户已经自己滚动了
                 web.scrollTo(0, target)
                 lastSet = web.scrollY
+                if (lastSet >= target - 2) {
+                    delay(32) // 等 WebView 把新位置画出来再露
+                    break
+                }
+                if (attempt == 15) restore.revealed = true
             }
         } finally {
             restore.settled = true
+            restore.revealed = true
         }
     }
-    AndroidView(
-        factory = { ctx ->
-            WebViewPool.obtain(ctx).also {
-                it.setBackgroundColor(bg)
-                state.webViews[id] = it
-                it.setOnScrollChangeListener { _, _, y, _, oldY -> state.onWebScroll(id, y, oldY) }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pressedImage by remember { mutableStateOf<String?>(null) }
+    Box(Modifier.fillMaxSize()) {
+        AndroidView(
+            factory = { ctx ->
+                WebViewPool.obtain(ctx).also {
+                    it.setBackgroundColor(bg)
+                    state.webViews[id] = it
+                    it.setOnScrollChangeListener { _, _, y, _, oldY -> state.onWebScroll(id, y, oldY) }
+                    // 长按图片：弹出保存/分享；长按文字等其它地方照旧（返回 false，系统选字）
+                    it.setOnLongClickListener { v ->
+                        val hit = (v as WebView).hitTestResult
+                        val src = hit.extra
+                        if ((hit.type == WebView.HitTestResult.IMAGE_TYPE || hit.type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) && !src.isNullOrBlank()) {
+                            v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            pressedImage = src
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+            onReset = null,
+            onRelease = {
+                if (restore.settled && it.tag != null) ReaderScrollMemory[id] = it.scrollY
+                if (state.webViews[id] === it) state.webViews.remove(id)
+                WebViewPool.recycle(it)
+            },
+            update = { view ->
+                view.setBackgroundColor(bg)
+                if (html != null && view.tag != html) {
+                    view.tag = html
+                    view.loadDataWithBaseURL(article?.url ?: "https://runnel.invalid/", html, "text/html", "utf-8", null)
+                }
+            },
+        )
+        if (!restore.revealed) Box(Modifier.fillMaxSize().background(colors.background))
+    }
+
+    pressedImage?.let { src ->
+        val referer = article?.url
+        fun act(done: String, failed: String, block: suspend (ImageActions.Picture) -> Boolean) {
+            scope.launch {
+                val picture = ImageActions.load(src, referer)
+                if (picture == null) state.toast("图片下载失败")
+                else if (block(picture)) done.takeIf { it.isNotEmpty() }?.let(state::toast)
+                else state.toast(failed)
             }
-        },
-        modifier = Modifier.fillMaxSize(),
-        onReset = null,
-        onRelease = {
-            if (restore.settled && it.tag != null) ReaderScrollMemory[id] = it.scrollY
-            if (state.webViews[id] === it) state.webViews.remove(id)
-            WebViewPool.recycle(it)
-        },
-        update = { view ->
-            view.setBackgroundColor(bg)
-            if (html != null && view.tag != html) {
-                view.tag = html
-                view.loadDataWithBaseURL(article?.url ?: "https://runnel.invalid/", html, "text/html", "utf-8", null)
-            }
-        },
-    )
+        }
+        ActionSheet(
+            title = null,
+            actions = listOf(
+                SheetAction("保存到相册") { act("已保存到相册（Pictures/Runnel）", "保存失败") { ImageActions.save(context, it) } },
+                SheetAction("分享图片") { act("", "分享失败") { ImageActions.share(context, it) } },
+            ),
+            onDismiss = { pressedImage = null },
+        )
+    }
 }
 
 @Composable

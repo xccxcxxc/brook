@@ -15,8 +15,12 @@
 - 本地 `origin` = 公开仓库（推送用 gh 的凭据，token 需要 `workflow` 权限），`private` = 私有仓库。
 - 签名：2026-10-23 起包名改为 `io.github.xccxcxxc.runnel`，换了新证书（CN=Runnel）；旧包 `io.github.xccxcxxc.brook` 不能覆盖升级，需手动卸载。公开仓库的 Secrets 是 `RUNNEL_KEYSTORE_B64` / `RUNNEL_KEYSTORE_PASSWORD`，旧的 `BROOK_*` 已弃用，可删。
 
-## 1. 当前状态（2026-10-23）
+## 1. 当前状态（2026-10-24）
 
+- **Runnel 1.11 开发完成**（2026-10-24，用户还没真机测）：相对 1.1 两项。
+  - 长按阅读页图片 → 底部菜单“保存到相册 / 分享图片”（`ui/reader/ImageActions.kt`）：`ArticlePage` 给 WebView 设 `OnLongClickListener`，`hitTestResult` 是 IMAGE / SRC_IMAGE_ANCHOR 才接管（长按文字仍系统选字）；图片经 `ReaderImageCache.download`（缓存优先，带文章 Referer）取字节，保存走 MediaStore（Pictures/Runnel，不需要权限），分享写到 `cache/shared-images` 再走 FileProvider（`${applicationId}.fileprovider`，`res/xml/file_paths.xml`）。`data:` 图片也支持。
+  - 再次打开读过的文章回到原位置时不再“滑”：以前先显示顶部、再 `scrollTo` 跳过去。现在 `ScrollRestore.revealed` 为 false 时 `ArticlePage` 用背景色盖住 WebView，滚到位后（或最多 0.8 秒）再露出，重试间隔 50ms。
+  - 测试：`ReaderTest.longPressImageOffersSaveAndShare`、`reopenRestoresScrollPosition`。注意 Windows 上没有 `pwsh`，`scripts/connected-test.ps1` 是无 BOM 的 UTF-8，PowerShell 5.1 直接跑会乱码，要先复制成带 BOM 的临时文件再用 `powershell -File` 跑。
 - **Runnel 1.1 已发布**（2026-10-23）：正式 Release `v1.1`（https://github.com/xccxcxxc/runnel/releases/tag/v1.1，附 `Runnel-1.1.apk`，versionCode 209，正式签名 CN=Runnel，目标提交 `7e60ad6`），可覆盖安装 1.0。相对 1.0 只有下一条“阅读页视频”。
 - **阅读页视频**（含在 1.1，2026-10-23，用户还没真机测）：喷嚏图卦、虎嗅的视频打不开。
   - 喷嚏：正文里是微博视频 / B 站 / 喷嚏自己的音频卡片 iframe，`ArticleProcessor` 以前只放行 YouTube 等，其余换成“嵌入内容 ↗”链接。现在放行国内视频站和与文章同主机的 iframe（`ArticleProcessor.embeddable`，按主机名后缀，不看整个地址），视频站的 http 改 https；旧文章里的链接由 `ReaderHtml.restoreEmbeds` 显示时换回播放器。iframe 按 width/height 定宽高比。
@@ -53,7 +57,7 @@
 ## 3. 发版本
 
 - **只有用户明确说发布并给出版本号时才发**，版本号以用户给的为准，不自己推断或递增。
-- `app/build.gradle.kts` 的 `versionName` 现在是 `1.1`（2026-10-23 发布；之后 CI 的 `latest` 测试包也显示 1.1，靠 versionCode = 200 + 提交数区分）；发下一版时改成用户给的版本号。
+- `app/build.gradle.kts` 的 `versionName` 现在是 `1.11`（2026-10-24 发布；之后 CI 的 `latest` 测试包也显示 1.11，靠 versionCode = 200 + 提交数区分）；发下一版时改成用户给的版本号。
 - 发法：改版本号提交推送 → 本地 `assembleRelease`、验签 → `gh release create v<版本> Runnel-<版本>.apk --title "Runnel <版本>" --notes-file <说明> --target <完整 SHA>`（短 SHA 会报 422）（正式版，不是 prerelease）。CI 只在推 `main` 时跑，不会覆盖 tag 的 Release。
 - 更新说明写功能总览 + 相对上一版的改动 + 已知问题（1.0.0 的说明在 Release 页面）。
 

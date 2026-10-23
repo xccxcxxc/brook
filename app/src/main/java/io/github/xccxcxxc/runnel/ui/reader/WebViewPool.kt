@@ -56,6 +56,7 @@ object WebViewPool {
         (view.parent as? ViewGroup)?.removeView(view)
         view.stopLoading()
         view.setOnScrollChangeListener(null)
+        view.setOnLongClickListener(null)
         view.tag = null
         view.scrollTo(0, 0)
         (view.context as MutableContextWrapper).baseContext = view.context.applicationContext

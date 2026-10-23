@@ -148,7 +148,7 @@ class ReaderTest {
     }
 
     /** 像手指一样点 WebView 里 [selector] 元素的中心（CSS 像素换算成屏幕像素）。 */
-    private fun tapInWebView(selector: String) {
+    private fun tapInWebView(selector: String, tap: Tap = Tap.SINGLE) {
         val rect = JSONArray(js("(function(){var r=document.querySelector('$selector').getBoundingClientRect();return [r.left+r.width/2,r.top+r.height/2,window.devicePixelRatio];})()"))
         val ratio = rect.getDouble(2)
         val x = (rect.getDouble(0) * ratio).toFloat()
@@ -158,7 +158,36 @@ class ReaderTest {
             floatArrayOf(loc[0] + x, loc[1] + y)
         }
         onView(allOf(isAssignableFrom(WebView::class.java), isDisplayed()))
-            .perform(GeneralClickAction(Tap.SINGLE, at, Press.FINGER, 0, 0))
+            .perform(GeneralClickAction(tap, at, Press.FINGER, 0, 0))
+    }
+
+    /** 长按正文里的图片：弹出“保存到相册 / 分享图片”（2026-10-24，以前长按没反应）；长按文字不弹。 */
+    @Test
+    fun longPressImageOffersSaveAndShare() {
+        openArticle("<p id=\"txt\">正文文字</p><p><img id=\"pic\" src=\"${png72()}\" alt=\"图\"></p>")
+        waitFor { js("document.querySelector('#pic').complete && document.querySelector('#pic').naturalWidth") == "72" }
+        tapInWebView("#pic", Tap.LONG)
+        rule.waitUntilAtLeastOneExists(hasText("保存到相册"), 5_000)
+        rule.onNodeWithText("分享图片").assertExists()
+    }
+
+    /** 点开读过的文章（滚到深处）退出再进，直接回到原位置。 */
+    @Test
+    fun reopenRestoresScrollPosition() {
+        val w = scrolledDeep()
+        var saved = 0
+        scenario!!.onActivity { saved = w.scrollY }
+        pressBack()
+        rule.waitUntilAtLeastOneExists(hasText("阅读页测试文章"), 10_000)
+        rule.onNodeWithText("阅读页测试文章").performClick()
+        rule.waitUntilAtLeastOneExists(hasTestTag("reader_pager"), 10_000)
+        waitFor(5_000) { findWebViewY() >= saved - 2 }
+    }
+
+    private fun findWebViewY(): Int {
+        var y = -1
+        scenario!!.onActivity { y = findWebView(it.window.decorView)?.scrollY ?: -1 }
+        return y
     }
 
     /** 点标题 = 在浏览器里打开原文。真实 WebView 的点击要走到 shouldOverrideUrlLoading。 */

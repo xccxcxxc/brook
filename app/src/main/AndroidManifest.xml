@@ -27,6 +27,16 @@
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize" />
 
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- 桌面入口用 activity-alias，好在 设置 → 外观 → App 图标 里换图标（AppIcon.kt）：同一时间只启用一个 -->
         <activity-alias
             android:name=".LauncherRipple"

@@ -77,6 +77,30 @@ class ReaderImageCache(http: OkHttpClient, dir: File, maxBytes: Long = 500L * 10
         }
     }
 
+    /** [download] 的结果：图片字节和服务器给的类型（可能为空，也可能不是图片类型）。 */
+    class Downloaded(val bytes: ByteArray, val mime: String?)
+
+    /**
+     * 取整张图片的字节（长按保存/分享用）：先走缓存，看过的图不用再下载。阻塞，要在后台线程调用；
+     * 连不上或服务器返回错误时返回 null。
+     */
+    fun download(url: String, referer: String?): Downloaded? {
+        val headers = buildMap {
+            put("Accept", IMAGE_ACCEPT)
+            if (referer != null) put("Referer", referer)
+        }
+        val request = request(url, headers) ?: return null
+        return try {
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val type = resp.body.contentType()
+                Downloaded(resp.body.bytes(), type?.let { "${it.type}/${it.subtype}" })
+            }
+        } catch (e: IOException) {
+            null
+        }
+    }
+
     /** 缓存已用的字节数。 */
     fun usedBytes(): Long = runCatching { cache.size() }.getOrDefault(0L)
 

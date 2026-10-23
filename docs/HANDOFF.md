@@ -52,7 +52,7 @@
 ## 4. 构建、发布、测试（命令见 `CLAUDE.md`）
 
 - 推 `main` → GitHub Actions（`.github/workflows/build.yml`）：单元测试 + release APK，发布到滚动的 `latest` prerelease；Release 说明 = 自上一个包以来的提交标题和正文。连续推送时旧构建被取消（“已取消”不是故障）。
-- 签名：CI 用 Secrets（`RUNNEL_KEYSTORE_B64` / `RUNNEL_KEYSTORE_PASSWORD`），本地用 `%USERPROFILE%\.androidunnel-release.properties`，同一把证书（CN=Runnel）。**不要换证书、不要改包名**（上架 Play 后也改不了）；debug 签名的包不能给用户。
+- 签名：CI 用 Secrets（`RUNNEL_KEYSTORE_B64` / `RUNNEL_KEYSTORE_PASSWORD`），本地用 `%USERPROFILE%\.android\runnel-release.properties`，同一把证书（CN=Runnel）。**不要换证书、不要改包名**（上架 Play 后也改不了）；debug 签名的包不能给用户。
 - 单元测试（`app/src/test`，Robolectric + 纯逻辑）：`ListFilterTest`、`ReaderViewTest`、`ReaderLinkTest`、`PullFromBottomTest`、`GReaderApiTest`（MockWebServer）、`OpmlTest`、`ArticleProcessorTest`。
 - 模拟器仪器测试（`app/src/androidTest`，21 个）：`ListGesturesTest`（上拉/按钮标已读并离开、全已读直接离开、短列表回弹、下一个订阅源从下往上进场、上拉进入下一个订阅源时标已读、长按菜单位置和以上/以下标已读、菜单边界和点外面收起）、`ReaderTest`（快速一划不切篇、拉够才切、真实 WebView 点标题打开原文、表情尺寸、图片下不显示域名、“…”面板改设置即时生效、图片走自己的缓存、WebView 焦点/区域请求不翻页）、`DatabaseTest`（事务回滚、分块标已读、离线队列、WAL 并发读）。只跑一个类：加 `"-Pandroid.testInstrumentationRunnerArguments.class=io.github.xccxcxxc.brook.ReaderTest"`；结果在 `app\build\outputs\androidTest-results\connected\debug\`。
 - 性能只用 release 包判断：真机见 `docs/DEVICE.md`，脚本 `scripts/perf.sh`。

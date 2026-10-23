@@ -17,7 +17,7 @@
 
 ## 1. 当前状态（2026-10-24）
 
-- **Runnel 1.11 开发完成**（2026-10-24，用户还没真机测）：相对 1.1 两项。
+- **Runnel 1.11 已发布**（2026-10-24）：正式 Release `v1.11`（https://github.com/xccxcxxc/runnel/releases/tag/v1.11，附 `Runnel-1.11.apk`，versionCode 212，正式签名 CN=Runnel，目标提交 `813175a`），可覆盖安装 1.1。用户还没真机测，相对 1.1 两项。
   - 长按阅读页图片 → 底部菜单“保存到相册 / 分享图片”（`ui/reader/ImageActions.kt`）：`ArticlePage` 给 WebView 设 `OnLongClickListener`，`hitTestResult` 是 IMAGE / SRC_IMAGE_ANCHOR 才接管（长按文字仍系统选字）；图片经 `ReaderImageCache.download`（缓存优先，带文章 Referer）取字节，保存走 MediaStore（Pictures/Runnel，不需要权限），分享写到 `cache/shared-images` 再走 FileProvider（`${applicationId}.fileprovider`，`res/xml/file_paths.xml`）。`data:` 图片也支持。
   - 再次打开读过的文章回到原位置时不再“滑”：以前先显示顶部、再 `scrollTo` 跳过去。现在 `ScrollRestore.revealed` 为 false 时 `ArticlePage` 用背景色盖住 WebView，滚到位后（或最多 0.8 秒）再露出，重试间隔 50ms。
   - 测试：`ReaderTest.longPressImageOffersSaveAndShare`、`reopenRestoresScrollPosition`。注意 Windows 上没有 `pwsh`，`scripts/connected-test.ps1` 是无 BOM 的 UTF-8，PowerShell 5.1 直接跑会乱码，要先复制成带 BOM 的临时文件再用 `powershell -File` 跑。
